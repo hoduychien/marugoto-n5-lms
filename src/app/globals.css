@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+.font-vn,
+.font-jp {
+  scroll-behavior: smooth;
+  font-family: 'Noto Sans', 'Noto Sans JP', sans-serif !important;
+  font-synthesis: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+/* Tối ưu cỡ chữ trên iPad / Tablet (768px - 1200px): Giảm nhẹ 1-1.5px cho các text > 12px để chống rớt dòng khi xoay ngang */
+@media (min-width: 768px) and (max-width: 1200px) {
+  .text-base {
+    font-size: 0.9375rem !important; /* 15px thay vì 16px */
+    line-height: 1.45 !important;
+  }
+  .text-sm {
+    font-size: 0.8125rem !important; /* 13px thay vì 14px */
+    line-height: 1.4 !important;
+  }
+}
+
+/* Tối ưu bề mặt Canvas luyện viết trên iPad / Apple Pencil (chống cuộn trang & chống hiện kính lúp chọn chữ) */
+.canvas-writing-surface {
+  touch-action: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* ==========================================================================
+   Global Sleek Scrollbar (Áp dụng đồng bộ cho toàn bộ App, Màn hình & Select)
+   Lưu ý: Không dùng scrollbar-width/scrollbar-color để tránh Chrome trên Windows
+   vô hiệu hóa ::-webkit-scrollbar và hiện lại 2 mũi tên trên/dưới.
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:end:increment,
+::-webkit-scrollbar-button:horizontal:start:decrement,
+::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Tiện ích ẩn scrollbar cho container cuộn ngang (tabs, carousel) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ==========================================================================
+   Zero-Shadow / Flat Active-Driven Border Design
+   - Loại bỏ toàn bộ box-shadow trên toàn app.
+   - Bỏ hoàn toàn hiệu ứng hover có viền (hover không làm đổi/hiện viền).
+   - Chỉ hiển thị/đổi màu viền khi có hành động ACTIVE vào element (click/chạm :active, :focus, hoặc trạng thái active/selected).
+   ========================================================================== */
+*,
+::before,
+::after {
+  --tw-shadow: 0 0 #0000 !important;
+  --tw-shadow-colored: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
+/* Chuyển tiếp màu viền mượt mà cho các phần tử có viền */
+.border,
+[class*='border-'] {
+  transition-property: border-color, background-color, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Custom ultra-compact react-tooltip override */
+:root {
+  --rt-arrow-size: 5px !important;
+}
+
+.react-tooltip {
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+.react-tooltip [class*='styles-module_content'] {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+/* Custom sleek audio range slider */
+.audio-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  outline: none;
+}
+
+.audio-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #4f46e5;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.audio-range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.audio-range-slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #4f46e5;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+}
