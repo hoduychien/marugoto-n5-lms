@@ -31,7 +31,11 @@ import {
   HelpCircle,
   Clock,
   Send,
+  Eye,
+  Edit3,
+  Columns,
 } from 'lucide-react';
+import { marked } from 'marked';
 import { toast } from 'sonner';
 import { LessonSelectSwitcher } from '@/components/layout/LessonSelectSwitcher';
 import type { LessonInfo } from '@/lib/data/marugoto-seed';
@@ -49,6 +53,8 @@ interface LessonNotesClientProps {
   grammars: GrammarPoint[];
   dataSource: 'supabase' | 'seed';
 }
+
+export type EditorMode = 'edit' | 'preview' | 'split';
 
 const PRESET_TAGS = [
   '📌 Lời dặn Sensei',
@@ -71,9 +77,13 @@ export function LessonNotesClient({
   const [activeRefTab, setActiveRefTab] = useState<'vocab' | 'grammar'>('vocab');
   const [customTagInput, setCustomTagInput] = useState('');
   const [isCustomTagOpen, setIsCustomTagOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>('edit');
+  const [isPendingSave, setIsPendingSave] = useState(false);
+  const [saveCountdown, setSaveCountdown] = useState<number | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     getNote,
@@ -197,31 +207,78 @@ export function LessonNotesClient({
   // Lấy dữ liệu note hiện tại
   const currentNote = getNote(lesson.id, authUser?.email || 'guest');
 
-  // Debounced auto-save khi nội dung thay đổi
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    updateContent(lesson.id, val, authUser?.email);
+  // Tự động lưu sau 5 giây ngừng gõ
+  const trigger5sAutoSave = () => {
+    setIsPendingSave(true);
+    setSaveCountdown(5);
 
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+
+    let remaining = 5;
+    countdownIntervalRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) {
+        setSaveCountdown(remaining);
+      } else {
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+      }
+    }, 1000);
 
     autoSaveTimerRef.current = setTimeout(() => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+      setSaveCountdown(null);
+      setIsPendingSave(false);
       void saveNote(lesson.id, authUser?.email);
-    }, 1200);
+    }, 5000);
+  };
+
+  // Hủy timers khi unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const handleSaveImmediately = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setSaveCountdown(null);
+    setIsPendingSave(false);
+    await saveNote(lesson.id, authUser?.email);
+    toast.success('Đã lưu ghi chú bài học thành công!');
+  };
+
+  // Debounced auto-save sau 5 giây ngừng gõ khi nội dung thay đổi
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    updateContent(lesson.id, val, authUser?.email);
+    trigger5sAutoSave();
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     updateTitle(lesson.id, val, authUser?.email);
-
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-
-    autoSaveTimerRef.current = setTimeout(() => {
-      void saveNote(lesson.id, authUser?.email);
-    }, 1200);
+    trigger5sAutoSave();
   };
 
   // Keyboard shortcut Ctrl+S / Cmd+S
@@ -230,15 +287,13 @@ export function LessonNotesClient({
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (authUser) {
-          void saveNote(lesson.id, authUser.email).then(() => {
-            toast.success('Đã lưu ghi chú bài học thành công!');
-          });
+          void handleSaveImmediately();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [authUser, lesson.id, saveNote]);
+  }, [authUser, lesson.id]);
 
   // Thao tác chèn nhanh vào vị trí con trỏ Textarea
   const insertTextAtCursor = (before: string, after = '') => {
@@ -267,11 +322,7 @@ export function LessonNotesClient({
       );
     }, 10);
 
-    // Kích hoạt lưu
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      void saveNote(lesson.id, authUser?.email);
-    }, 1200);
+    trigger5sAutoSave();
   };
 
   // Mở popup đăng nhập
@@ -344,6 +395,18 @@ export function LessonNotesClient({
     const words = text ? text.split(/\s+/).length : 0;
     const lines = text ? text.split('\n').length : 0;
     return { chars, words, lines };
+  }, [currentNote.content]);
+
+  // Biên dịch Markdown phục vụ chức năng Xem trước (Preview MD)
+  const renderedMarkdownHtml = useMemo(() => {
+    try {
+      const content = currentNote.content?.trim()
+        ? currentNote.content
+        : '*Chưa có nội dung ghi chép. Bạn có thể gõ nội dung hoặc bấm vào từ vựng & mẫu câu bên cạnh để chèn nhanh.*';
+      return marked.parse(content, { gfm: true, breaks: true }) as string;
+    } catch {
+      return '<p class="text-rose-500 font-medium">Lỗi phân tích cú pháp Markdown.</p>';
+    }
   }, [currentNote.content]);
 
   // Tabs phân khu trong bài học
@@ -553,9 +616,14 @@ export function LessonNotesClient({
               {/* Badge trạng thái lưu */}
               <div className="flex items-center gap-1.5 text-xs font-medium">
                 {syncStatus === 'saving' ? (
-                  <span className="flex items-center gap-1.5 text-amber-600">
+                  <span className="flex items-center gap-1.5 text-amber-600 font-semibold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
                     <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
                     Đang lưu...
+                  </span>
+                ) : isPendingSave && saveCountdown !== null ? (
+                  <span className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-semibold animate-pulse">
+                    <Clock className="h-3.5 w-3.5 text-indigo-600" />
+                    Lưu sau {saveCountdown}s...
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
@@ -609,10 +677,7 @@ export function LessonNotesClient({
 
               <button
                 type="button"
-                onClick={() => {
-                  void saveNote(lesson.id, authUser.email);
-                  toast.success('Đã lưu ghi chú thành công!');
-                }}
+                onClick={handleSaveImmediately}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
               >
                 <Save className="h-3.5 w-3.5" />
@@ -747,117 +812,226 @@ export function LessonNotesClient({
                 showRefPanel ? 'lg:col-span-8' : 'lg:col-span-12'
               )}
             >
-              {/* Tiêu đề ghi chú */}
-              <div className="p-4 border-b border-slate-100">
-                <input
-                  type="text"
-                  value={currentNote.title}
-                  onChange={handleTitleChange}
-                  placeholder="Nhập tiêu đề ghi chú buổi học..."
-                  className="w-full text-lg sm:text-xl font-bold text-slate-900 border-none outline-none focus:ring-0 placeholder:text-slate-300 bg-transparent"
-                />
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Mẹo: Nhấn Ctrl + S để lưu tức thời • Tự động lưu sau mỗi lần gõ
-                </p>
+              {/* Tiêu đề ghi chú & Bộ chọn chế độ Xem trước / Soạn thảo */}
+              <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex-1 min-w-[220px]">
+                  <input
+                    type="text"
+                    value={currentNote.title}
+                    onChange={handleTitleChange}
+                    placeholder="Nhập tiêu đề ghi chú buổi học..."
+                    className="w-full text-lg sm:text-xl font-bold text-slate-900 border-none outline-none focus:ring-0 placeholder:text-slate-300 bg-transparent"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Mẹo: Tự động lưu sau 5s ngừng gõ • Nhấn Ctrl + S để lưu tức thời
+                  </p>
+                </div>
+
+                {/* Option chuyển chế độ: Soạn thảo / Xem trước (Preview MD) / Chia đôi */}
+                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50/90 p-0.5 text-xs font-medium shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode('edit')}
+                    title="Chế độ nhập văn bản Markdown"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all cursor-pointer',
+                      editorMode === 'edit'
+                        ? 'bg-white text-indigo-600 font-semibold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    <span>Soạn thảo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode('preview')}
+                    title="Xem trước kết quả hiển thị định dạng Markdown"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all cursor-pointer',
+                      editorMode === 'preview'
+                        ? 'bg-white text-indigo-600 font-semibold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>Xem trước (Preview MD)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode('split')}
+                    title="Xem song song soạn thảo & kết quả Markdown"
+                    className={cn(
+                      'hidden sm:inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all cursor-pointer',
+                      editorMode === 'split'
+                        ? 'bg-white text-indigo-600 font-semibold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <Columns className="h-3.5 w-3.5" />
+                    <span>Chia đôi</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Thanh định dạng nhanh (Formatting Toolbar) */}
-              <div className="flex items-center gap-1 px-4 py-2 bg-slate-50/70 border-b border-slate-100 flex-wrap text-slate-600">
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('**', '**')}
-                  title="In đậm (Bold)"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <Bold className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('*', '*')}
-                  title="In nghiêng (Italic)"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <Italic className="h-4 w-4" />
-                </button>
-                <div className="h-4 w-[1px] bg-slate-300 mx-1" />
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('\n- ')}
-                  title="Danh sách gạch đầu dòng"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <List className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('\n1. ')}
-                  title="Danh sách đánh số"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <ListOrdered className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('\n- [ ] ')}
-                  title="Danh sách việc cần làm (Task list)"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('\n> ')}
-                  title="Khối trích dẫn (Quote)"
-                  className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
-                >
-                  <Quote className="h-4 w-4" />
-                </button>
-                <div className="h-4 w-[1px] bg-slate-300 mx-1" />
-                {/* Nút chèn dấu ngoặc kép tiếng Nhật「」 */}
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('「', '」')}
-                  title="Ngoặc kép tiếng Nhật「 」"
-                  className="rounded px-2 py-1 text-xs font-jp font-bold bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 transition-colors cursor-pointer"
-                >
-                  「」
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('〜')}
-                  title="Dấu lượn sóng tiếng Nhật 〜"
-                  className="rounded px-2 py-1 text-xs font-jp font-bold bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 transition-colors cursor-pointer"
-                >
-                  〜
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTextAtCursor('【Lưu ý của Sensei】\n- ')}
-                  title="Chèn khối lời dặn của Sensei"
-                  className="rounded px-2 py-1 text-[11px] font-medium bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-800 transition-colors cursor-pointer"
-                >
-                  📌 Sensei dặn
-                </button>
-              </div>
+              {/* Thanh định dạng nhanh (Formatting Toolbar - hiển thị khi đang soạn thảo hoặc chia đôi) */}
+              {editorMode !== 'preview' ? (
+                <div className="flex items-center gap-1 px-4 py-2 bg-slate-50/70 border-b border-slate-100 flex-wrap text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('**', '**')}
+                    title="In đậm (Bold)"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <Bold className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('*', '*')}
+                    title="In nghiêng (Italic)"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <Italic className="h-4 w-4" />
+                  </button>
+                  <div className="h-4 w-[1px] bg-slate-300 mx-1" />
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('\n- ')}
+                    title="Danh sách gạch đầu dòng"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('\n1. ')}
+                    title="Danh sách đánh số"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <ListOrdered className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('\n- [ ] ')}
+                    title="Danh sách việc cần làm (Task list)"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('\n> ')}
+                    title="Khối trích dẫn (Quote)"
+                    className="rounded p-1.5 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+                  >
+                    <Quote className="h-4 w-4" />
+                  </button>
+                  <div className="h-4 w-[1px] bg-slate-300 mx-1" />
+                  {/* Nút chèn dấu ngoặc kép tiếng Nhật「」 */}
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('「', '」')}
+                    title="Ngoặc kép tiếng Nhật「 」"
+                    className="rounded px-2 py-1 text-xs font-jp font-bold bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 transition-colors cursor-pointer"
+                  >
+                    「」
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('〜')}
+                    title="Dấu lượn sóng tiếng Nhật 〜"
+                    className="rounded px-2 py-1 text-xs font-jp font-bold bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 transition-colors cursor-pointer"
+                  >
+                    〜
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertTextAtCursor('【Lưu ý của Sensei】\n- ')}
+                    title="Chèn khối lời dặn của Sensei"
+                    className="rounded px-2 py-1 text-[11px] font-medium bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-800 transition-colors cursor-pointer"
+                  >
+                    📌 Sensei dặn
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-4 py-2 bg-indigo-50/50 border-b border-indigo-100 text-xs text-indigo-700">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>Đang ở chế độ Xem trước Markdown (Preview MD)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode('edit')}
+                    className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    Chuyển sang soạn thảo
+                  </button>
+                </div>
+              )}
 
-              {/* Textarea Soạn thảo */}
-              <div className="p-4 flex-1">
-                <textarea
-                  ref={textareaRef}
-                  value={currentNote.content}
-                  onChange={handleContentChange}
-                  onKeyDown={(e) => {
-                    // Hỗ trợ thụt lề bằng phím Tab
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      insertTextAtCursor('  ');
-                    }
-                  }}
-                  placeholder="Gõ ghi chép bài học trên lớp ở đây... (Hỗ trợ Markdown, gõ Kanji, Hiragana, bullet points)"
-                  rows={18}
-                  className="w-full resize-y font-mono text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 border-none outline-none focus:ring-0 bg-transparent min-h-[380px]"
-                />
-              </div>
+              {/* VÙNG NỘI DUNG: HỖ TRỢ 3 CHẾ ĐỘ (SOẠN THẢO / XEM TRƯỚC / CHIA ĐÔI) */}
+              {editorMode === 'edit' && (
+                <div className="p-4 flex-1">
+                  <textarea
+                    ref={textareaRef}
+                    value={currentNote.content}
+                    onChange={handleContentChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        insertTextAtCursor('  ');
+                      }
+                    }}
+                    placeholder="Gõ ghi chép bài học trên lớp ở đây... (Hỗ trợ Markdown, gõ Kanji, Hiragana, bullet points)"
+                    rows={18}
+                    className="w-full resize-y font-mono text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 border-none outline-none focus:ring-0 bg-transparent min-h-[380px]"
+                  />
+                </div>
+              )}
+
+              {editorMode === 'preview' && (
+                <div className="p-5 sm:p-6 flex-1 overflow-y-auto max-h-[650px] min-h-[380px] bg-slate-50/20">
+                  <div
+                    className="markdown-preview"
+                    dangerouslySetInnerHTML={{ __html: renderedMarkdownHtml }}
+                  />
+                </div>
+              )}
+
+              {editorMode === 'split' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100 flex-1 min-h-[380px]">
+                  <div className="p-4 flex flex-col">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <Edit3 className="h-3 w-3 text-slate-400" />
+                      Mã nguồn Markdown
+                    </div>
+                    <textarea
+                      ref={textareaRef}
+                      value={currentNote.content}
+                      onChange={handleContentChange}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab') {
+                          e.preventDefault();
+                          insertTextAtCursor('  ');
+                        }
+                      }}
+                      placeholder="Gõ ghi chép bài học ở đây..."
+                      rows={18}
+                      className="w-full flex-1 resize-none font-mono text-xs sm:text-sm leading-relaxed text-slate-800 placeholder:text-slate-300 border-none outline-none focus:ring-0 bg-transparent min-h-[360px]"
+                    />
+                  </div>
+                  <div className="p-4 sm:p-5 overflow-y-auto max-h-[650px] bg-slate-50/30">
+                    <div className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <Eye className="h-3 w-3 text-indigo-500" />
+                      Xem trước trực tiếp (Live Preview)
+                    </div>
+                    <div
+                      className="markdown-preview"
+                      dangerouslySetInnerHTML={{ __html: renderedMarkdownHtml }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Footer thanh trạng thái */}
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50 text-[11px] text-slate-500 rounded-b-xl">
