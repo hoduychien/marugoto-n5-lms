@@ -421,7 +421,7 @@ export default function AdminPage() {
 
   return (
     <AppShell>
-      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="w-full max-w-full p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-hidden">
         {/* ================= HEADER QUẢN TRỊ ================= */}
         <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6 space-y-4">
           <div className="space-y-1.5">

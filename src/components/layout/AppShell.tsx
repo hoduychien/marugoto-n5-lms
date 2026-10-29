@@ -25,6 +25,7 @@ import {
   Settings,
   ChevronDown,
   Check,
+  NotebookPen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -51,13 +52,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsRef = React.useRef<HTMLDivElement>(null);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
 
-  // Tự động mở popup đăng nhập nếu có tham số ?login=1 trên URL
+  // Tự động mở popup đăng nhập nếu có tham số ?login=1 trên URL hoặc qua event marugoto:open-login
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('login') === '1' || params.get('login') === 'true') {
         setIsLoginModalOpen(true);
       }
+
+      const handleOpenLogin = () => {
+        setIsLoginModalOpen(true);
+      };
+      window.addEventListener('marugoto:open-login', handleOpenLogin);
+      return () => {
+        window.removeEventListener('marugoto:open-login', handleOpenLogin);
+      };
     }
   }, [pathname]);
 
@@ -144,10 +153,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ? Math.min(18, Math.max(1, Number(lessonMatch[1])))
     : 1;
 
-  // Nhận diện phân khu hiện tại (overview | vocab | grammar | kanji | kaiwa)
+  // Nhận diện phân khu hiện tại (overview | vocab | grammar | kanji | kaiwa | notes)
   const activeModuleSlug = useMemo(() => {
     const modMatch = pathname?.match(
-      /^\/lessons\/\d+\/(overview|vocab|grammar|kanji|kaiwa)/
+      /^\/lessons\/\d+\/(overview|vocab|grammar|kanji|kaiwa|notes)/
     );
     return modMatch ? modMatch[1] : 'overview';
   }, [pathname]);
@@ -382,6 +391,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       href: `/lessons/${activeLessonId}/kaiwa`,
       icon: MessageSquare,
     },
+    {
+      label: 'Ghi chép (Take Note)',
+      href: `/lessons/${activeLessonId}/notes`,
+      icon: NotebookPen,
+    },
   ];
 
   // Tiêu đề ngữ cảnh hiện tại trên Header
@@ -395,6 +409,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return 'Ôn tập thẻ ghi nhớ ngắt quãng (SRS)';
     if (pathname?.startsWith('/admin')) return 'Cổng Quản trị Học liệu (CMS)';
     if (pathname?.startsWith('/lessons/')) {
+      if (pathname.includes('/notes')) {
+        return `Ghi chép trên lớp • ${activeLessonInfo.topic_name}`;
+      }
       return activeLessonInfo.topic_name;
     }
     return 'Giáo trình Marugoto A1 (N5)';

@@ -218,6 +218,35 @@ CREATE POLICY "Users can delete own custom decks" ON user_custom_decks FOR DELET
 CREATE INDEX IF NOT EXISTS idx_user_custom_decks_user_id ON user_custom_decks(user_id);
 
 -- ============================================================================
+-- 11. Lesson Notes (Ghi chép học tập trên lớp theo từng bài học)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS lesson_notes (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+  title TEXT DEFAULT '',
+  content TEXT DEFAULT '',
+  tags JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (user_id, lesson_id)
+);
+
+ALTER TABLE lesson_notes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own lesson notes" ON lesson_notes;
+DROP POLICY IF EXISTS "Users can insert own lesson notes" ON lesson_notes;
+DROP POLICY IF EXISTS "Users can update own lesson notes" ON lesson_notes;
+DROP POLICY IF EXISTS "Users can delete own lesson notes" ON lesson_notes;
+
+CREATE POLICY "Users can view own lesson notes" ON lesson_notes FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own lesson notes" ON lesson_notes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own lesson notes" ON lesson_notes FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own lesson notes" ON lesson_notes FOR DELETE USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_lesson_notes_user_lesson ON lesson_notes(user_id, lesson_id);
+
+-- ============================================================================
 -- TRIGGER: Tự động khởi tạo Profile khi có User đăng ký mới qua Supabase Auth
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()

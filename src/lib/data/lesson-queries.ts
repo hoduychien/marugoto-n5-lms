@@ -451,4 +451,77 @@ export async function getLessonWithOverview(lessonId: number): Promise<{
   };
 }
 
+/**
+ * Truy vấn thông tin bài học và dữ liệu tham khảo nhanh cho trang Ghi chép (Take Note).
+ */
+export async function getLessonForNotes(lessonId: number): Promise<{
+  lesson: LessonInfo;
+  allLessons: LessonInfo[];
+  vocabularies: VocabularyItem[];
+  grammars: GrammarPoint[];
+  source: 'supabase' | 'seed';
+}> {
+  const safeId =
+    Number.isFinite(lessonId) && lessonId >= 1 && lessonId <= 18
+      ? lessonId
+      : 1;
+
+  if (isSupabaseConfigured) {
+    try {
+      const [lessonsRes, vocabRes, grammarRes] = await Promise.all([
+        supabase
+          .from('lessons')
+          .select('*')
+          .order('order_index', { ascending: true }),
+        supabase
+          .from('vocabularies')
+          .select('*')
+          .eq('lesson_id', safeId)
+          .order('id', { ascending: true }),
+        supabase
+          .from('grammars')
+          .select('*')
+          .eq('lesson_id', safeId)
+          .order('id', { ascending: true }),
+      ]);
+
+      if (
+        !lessonsRes.error &&
+        lessonsRes.data &&
+        lessonsRes.data.length > 0
+      ) {
+        const currentLesson =
+          lessonsRes.data.find((l) => l.id === safeId) || lessonsRes.data[0];
+        return {
+          lesson: currentLesson as LessonInfo,
+          allLessons: lessonsRes.data as LessonInfo[],
+          vocabularies:
+            vocabRes.data && vocabRes.data.length > 0
+              ? (vocabRes.data as VocabularyItem[])
+              : MARUGOTO_VOCAB_SEED[safeId] || MARUGOTO_VOCAB_SEED[1],
+          grammars:
+            grammarRes.data && grammarRes.data.length > 0
+              ? (grammarRes.data as GrammarPoint[])
+              : MARUGOTO_GRAMMAR_SEED[safeId] || MARUGOTO_GRAMMAR_SEED[1],
+          source: 'supabase',
+        };
+      }
+    } catch {
+      // Fallback seed
+    }
+  }
+
+  const fallbackLesson =
+    MARUGOTO_LESSONS_SEED.find((l) => l.id === safeId) ||
+    MARUGOTO_LESSONS_SEED[0];
+
+  return {
+    lesson: fallbackLesson,
+    allLessons: MARUGOTO_LESSONS_SEED,
+    vocabularies: MARUGOTO_VOCAB_SEED[fallbackLesson.id] || MARUGOTO_VOCAB_SEED[1],
+    grammars: MARUGOTO_GRAMMAR_SEED[fallbackLesson.id] || MARUGOTO_GRAMMAR_SEED[1],
+    source: 'seed',
+  };
+}
+
 

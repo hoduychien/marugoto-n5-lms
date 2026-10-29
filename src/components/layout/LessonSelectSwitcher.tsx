@@ -8,7 +8,13 @@ import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import type { LessonInfo } from '@/lib/data/marugoto-seed';
 import { cn } from '@/lib/utils';
 
-export type LessonModuleSlug = 'overview' | 'vocab' | 'grammar' | 'kanji' | 'kaiwa';
+export type LessonModuleSlug =
+  | 'overview'
+  | 'vocab'
+  | 'grammar'
+  | 'kanji'
+  | 'kaiwa'
+  | 'notes';
 
 export interface LessonSelectSwitcherProps {
   currentLessonId: number;

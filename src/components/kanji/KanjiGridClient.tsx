@@ -16,6 +16,7 @@ import {
   Eraser,
   X,
   CheckCircle2,
+  NotebookPen,
 } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import 'react-tooltip/dist/react-tooltip.css';
@@ -164,10 +165,16 @@ export function KanjiGridClient({
       icon: MessageSquare,
       active: false,
     },
+    {
+      label: 'Ghi chép (Take Note)',
+      href: `/lessons/${lesson.id}/notes`,
+      icon: NotebookPen,
+      active: false,
+    },
   ];
 
   return (
-    <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8 space-y-6">
+    <main className="w-full max-w-full p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-hidden">
       {/* ================= LESSON SWITCHER & HEADER ================= */}
       <div className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

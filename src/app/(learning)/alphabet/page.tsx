@@ -564,7 +564,7 @@ export default function AlphabetWritingPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5 w-full max-w-full overflow-hidden">
+    <main className="w-full max-w-full p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-hidden">
       {/* ================= HEADER & CHUYỂN CHẾ ĐỘ HỌC ================= */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5">
         {/* Hàng 1: Tiêu đề & Thông tin (Chiếm trọn bề ngang, không bị bóp nghẹt) */}

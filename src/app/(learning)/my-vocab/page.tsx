@@ -433,7 +433,7 @@ function MyVocabContent() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+    <div className="w-full max-w-full p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-hidden">
       {/* ========================================================
           TRƯỜNG HỢP 1: CHI TIẾT BỘ TỪ VỰNG (QUẢN LÝ TỪ VỰNG)
          ======================================================== */}

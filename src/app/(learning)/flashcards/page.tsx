@@ -160,7 +160,7 @@ function FlashcardsReviewContent() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-hidden">
+    <main className="w-full max-w-full p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-hidden">
       {/* ================= TOP HEADER & CONTROLS ================= */}
       <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -481,7 +481,7 @@ export default function FlashcardsPage() {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto max-w-4xl p-8 text-center text-sm text-slate-500">
+        <main className="w-full max-w-full p-8 text-center text-sm text-slate-500">
           Đang tải bộ thẻ SRS Flashcards...
         </main>
       }
